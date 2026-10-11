@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.MouseButtonEvent
+import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
@@ -201,7 +202,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
             val info = hover.name + "  x" + hover.total.toString() + "  in " + hover.boxes.size.toString() + " box"
             g.text(font, info, px + 18, fy + 7, c(0xFF3FB950))
         } else {
-            g.text(font, "Click an item to highlight its box for 30s", px + 18, fy + 7, c(0xFF8B949E))
+            g.text(font, "Type a name, then press Enter", px + 18, fy + 7, c(0xFF8B949E))
         }
 
         search.extractRenderState(g, mouseX, mouseY, delta)
@@ -254,6 +255,20 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     }
 
     override fun isPauseScreen(): Boolean = false
+
+    override fun keyPressed(event: KeyEvent): Boolean {
+        val k = event.key()
+        if (k == 257 || k == 335) {
+            val e = hovered ?: shown.firstOrNull()
+            if (e != null) {
+                dbg = "enter on " + e.name
+                Highlights.add(Minecraft.getInstance(), e.boxes)
+                onClose()
+                return true
+            }
+        }
+        return super.keyPressed(event)
+    }
 }
 
 object FinderPending {
