@@ -24,6 +24,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     private var gy = 0
     private var scroll = 0
     private var dragging = false
+    private var dbg = ""
     private var hovered: Entry? = null
     private lateinit var search: EditBox
     private var all = ArrayList<Entry>()
