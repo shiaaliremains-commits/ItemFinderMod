@@ -1,0 +1,51 @@
+{
+	"schemaVersion": 1,
+	"id": "itemfinder",
+	"version": "${version}",
+	"name": "ItemFinder",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/itemfinder/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "my.itemfinder.ItemFinder",
+				"adapter": "kotlin"
+			}
+		],
+		"client": [
+			{
+				"value": "my.itemfinder.client.ItemFinderClient",
+				"adapter": "kotlin"
+			}
+		],
+		"fabric-datagen": [
+			{
+				"value": "my.itemfinder.client.ItemFinderDataGenerator",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"itemfinder.mixins.json",
+		{
+			"config": "itemfinder.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	}
+}
