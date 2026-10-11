@@ -24,6 +24,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     private var gy = 0
     private var scroll = 0
     private var dragging = false
+    private var hovered: Entry? = null
     private lateinit var search: EditBox
     private var all = ArrayList<Entry>()
     private var shown = ArrayList<Entry>()
@@ -130,6 +131,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         pix(g, px + 14, py + 36, 1, mag, mapOf('#' to c(0xFF58A6FF)))
 
         val hover = entryAt(mouseX.toDouble(), mouseY.toDouble())
+        hovered = hover
         for (i in 0 until cols * rowsVis) {
             val sx = gx + (i % cols) * cell
             val sy = gy + (i / cols) * cell
@@ -186,7 +188,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         if (event.button() == 0) {
             val mx = event.x()
             val my = event.y()
-            val e = entryAt(mx, my)
+            val e = hovered ?: entryAt(mx, my)
             if (e != null) {
                 Highlights.add(Minecraft.getInstance(), e.boxes)
                 onClose()
