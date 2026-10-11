@@ -12,7 +12,6 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.resources.Identifier
 import net.minecraft.world.InteractionResult
-import org.lwjgl.glfw.GLFW
 
 object ItemFinderClient : ClientModInitializer {
 
@@ -26,7 +25,7 @@ object ItemFinderClient : ClientModInitializer {
     override fun onInitializeClient() {
         val cat = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("itemfinder", "main"))
         val key = KeyMappingHelper.registerKeyMapping(
-            KeyMapping("key.itemfinder.open", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K, cat)
+            KeyMapping("key.itemfinder.open", InputConstants.KEY_K, cat)
         )
 
         UseBlockCallback.EVENT.register(UseBlockCallback { _, world, _, hit ->
@@ -55,7 +54,7 @@ object ItemFinderClient : ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { mc ->
             Highlights.tick(mc)
             while (key.consumeClick()) {
-                if (mc.screen == null && mc.level != null) {
+                if (mc.level != null) {
                     show(mc, FinderScreen())
                 }
             }
