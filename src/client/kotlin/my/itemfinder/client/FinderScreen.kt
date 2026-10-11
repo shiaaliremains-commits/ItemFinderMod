@@ -35,16 +35,6 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     private var wasDown = false
     private var pendingEntry: Entry? = null
 
-    private fun leftDown(): Boolean {
-        try {
-            val mc = Minecraft.getInstance()
-            val mh = Minecraft::class.java.getField("mouseHandler").get(mc)
-            val m = mh.javaClass.methods.firstOrNull { it.name == "isLeftPressed" && it.parameterCount == 0 }
-            if (m != null) return m.invoke(mh) as Boolean
-        } catch (t: Throwable) {
-        }
-        return false
-    }
 
     fun commit() {
         val e = pendingEntry ?: return
@@ -206,6 +196,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         }
 
         search.extractRenderState(g, mouseX, mouseY, delta)
+        g.text(font, "dbg: " + dbg + " | down=" + wasDown.toString() + " | hover=" + (hovered?.name ?: "none"), 4, 4, c(0xFFFFFFFF))
     }
 
     private fun setScrollFrom(my: Double) {
@@ -216,24 +207,6 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         scroll = Math.round(f * ms).toInt()
     }
 
-    override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
-        if (event.button() == 0) {
-            val mx = event.x()
-            val my = event.y()
-            val e = hovered ?: entryAt(mx, my)
-            if (e != null) {
-                Highlights.add(Minecraft.getInstance(), e.boxes)
-                onClose()
-                return true
-            }
-            if (mx >= px + 232 && mx <= px + 244 && my >= gy && my <= gy + rowsVis * cell) {
-                dragging = true
-                setScrollFrom(my)
-                return true
-            }
-        }
-        return super.mouseClicked(event, doubleClick)
-    }
 
     override fun mouseDragged(event: MouseButtonEvent, dx: Double, dy: Double): Boolean {
         if (dragging) {
@@ -243,10 +216,6 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         return super.mouseDragged(event, dx, dy)
     }
 
-    override fun mouseReleased(event: MouseButtonEvent): Boolean {
-        dragging = false
-        return super.mouseReleased(event)
-    }
 
     override fun mouseScrolled(mx: Double, my: Double, sx: Double, sy: Double): Boolean {
         val dir = if (sy > 0) -1 else 1
@@ -255,6 +224,57 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     }
 
     override fun isPauseScreen(): Boolean = false
+
+    private fun leftDown(): Boolean {
+        try {
+            val mc = Minecraft.getInstance()
+            val win = mc.window
+            val hm = win.javaClass.methods.first { it.name == "handle" || it.name == "getWindow" }
+            val handle = hm.invoke(win) as Long
+            val glfw = Class.forName("org.lwjgl.glfw.GLFW")
+            val gm = glfw.getMethod("glfwGetMouseButton", java.lang.Long.TYPE, Integer.TYPE)
+            return (gm.invoke(null, handle, 0) as Int) == 1
+        } catch (t: Throwable) {
+            dbg = "poll fail " + t.toString()
+        }
+        return false
+    }
+
+    private fun pick(e: Entry) {
+        Highlights.add(Minecraft.getInstance(), e.boxes)
+        DebugLog.log("picked " + e.name)
+        onClose()
+    }
+
+    override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
+        val mx = event.x()
+        val my = event.y()
+        dbg = "click b=" + event.button().toString() + " x=" + mx.toInt().toString() + " y=" + my.toInt().toString()
+        DebugLog.log(dbg)
+        val e = entryAt(mx, my) ?: hovered
+        if (e != null) {
+            pick(e)
+            return true
+        }
+        if (mx >= px + 232 && mx <= px + 244 && my >= gy && my <= gy + rowsVis * cell) {
+            dragging = true
+            setScrollFrom(my)
+            return true
+        }
+        return super.mouseClicked(event, doubleClick)
+    }
+
+    override fun mouseReleased(event: MouseButtonEvent): Boolean {
+        val wasDrag = dragging
+        dragging = false
+        dbg = "release b=" + event.button().toString()
+        val e = hovered
+        if (!wasDrag && e != null) {
+            pick(e)
+            return true
+        }
+        return super.mouseReleased(event)
+    }
 
     override fun keyPressed(event: KeyEvent): Boolean {
         val k = event.key()
