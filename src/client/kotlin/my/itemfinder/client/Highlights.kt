@@ -3,6 +3,8 @@ package my.itemfinder.client
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.particles.ParticleTypes
+import net.minecraft.gizmos.GizmoStyle
+import net.minecraft.gizmos.Gizmos
 import net.minecraft.world.level.Level
 
 object Highlights {
@@ -14,6 +16,7 @@ object Highlights {
 
     val list = ArrayList<H>()
     var now = 0
+    private var gizmoFailed = false
 
     fun add(mc: Minecraft, boxes: List<Box>) {
         val player = mc.player ?: return
@@ -32,6 +35,46 @@ object Highlights {
 
     private fun p(level: Level, x: Double, y: Double, z: Double) {
         level.addParticle(ParticleTypes.END_ROD, x, y, z, 0.0, 0.0, 0.0)
+    }
+
+    private fun rainbow(t: Float): Int {
+        val h = t * 6f
+        val i = h.toInt()
+        val f = h - i
+        val q = (255 * (1f - f)).toInt()
+        val u = (255 * f).toInt()
+        val r: Int
+        val g: Int
+        val b: Int
+        when (i % 6) {
+            0 -> { r = 255; g = u; b = 0 }
+            1 -> { r = q; g = 255; b = 0 }
+            2 -> { r = 0; g = 255; b = u }
+            3 -> { r = 0; g = q; b = 255 }
+            4 -> { r = u; g = 0; b = 255 }
+            else -> { r = 255; g = 0; b = q }
+        }
+        return (r shl 16) or (g shl 8) or b
+    }
+
+    fun render() {
+        if (gizmoFailed) return
+        val mc = Minecraft.getInstance()
+        if (mc.level == null || list.isEmpty()) return
+        try {
+            val dim = Store.dimOf(mc)
+            val t = (System.currentTimeMillis() % 3000L) / 3000f
+            val rgb = rainbow(t)
+            val stroke = (0xFF shl 24) or rgb
+            val fill = (0x40 shl 24) or rgb
+            for (h in list) {
+                if (h.dim != dim) continue
+                Gizmos.cuboid(h.pos, GizmoStyle.strokeAndFill(stroke, 3.0f, fill)).setAlwaysOnTop()
+            }
+        } catch (t: Throwable) {
+            gizmoFailed = true
+            DebugLog.error("gizmo render", t)
+        }
     }
 
     fun tick(mc: Minecraft) {
@@ -63,7 +106,7 @@ object Highlights {
                     p(level, x, y, z)
                 }
             }
-            if (now % 6 == 0) {
+            if (gizmoFailed && now % 6 == 0) {
                 for (i in 0..4) {
                     val t = i / 4.0
                     for (a in 0..1) {
@@ -73,11 +116,6 @@ object Highlights {
                             p(level, x0 + a, y0 + b, z0 + t)
                         }
                     }
-                }
-            }
-            if (now % 3 == 0) {
-                for (k in 0..14) {
-                    p(level, cx, y0 + 1.1 + k * 0.5, cz)
                 }
             }
         }
