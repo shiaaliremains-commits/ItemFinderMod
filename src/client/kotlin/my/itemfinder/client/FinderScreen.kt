@@ -81,6 +81,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         search.setResponder { _ -> scroll = 0; refilter() }
         addWidget(search)
         setInitialFocus(search)
+        DebugLog.log("screen opened entries=" + all.size.toString() + " w=" + width.toString() + " h=" + height.toString())
         refilter()
     }
 

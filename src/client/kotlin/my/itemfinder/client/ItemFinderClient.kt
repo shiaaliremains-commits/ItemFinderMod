@@ -19,7 +19,7 @@ object ItemFinderClient : ClientModInitializer {
         val methods = Minecraft::class.java.methods
         val m = methods.firstOrNull { it.name == "setScreenAndShow" && it.parameterCount == 1 }
             ?: methods.first { it.name == "setScreen" && it.parameterCount == 1 }
-        m.invoke(mc, s)
+        try { m.invoke(mc, s) } catch (t: Throwable) { DebugLog.error("open screen", t) }
     }
 
     override fun onInitializeClient() {
