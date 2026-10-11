@@ -52,7 +52,7 @@ object ItemFinderClient : ClientModInitializer {
             }
         })
 
-        LevelRenderEvents.DEBUG_RENDER.register(LevelRenderEvents.DebugRender { _ ->
+        LevelRenderEvents.BEFORE_GIZMOS.register(LevelRenderEvents.BeforeGizmos { _ ->
             Highlights.render()
         })
 
