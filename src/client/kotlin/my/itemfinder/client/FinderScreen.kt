@@ -30,6 +30,27 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     private var shown = ArrayList<Entry>()
 
     private fun c(v: Long): Int = v.toInt()
+    private var wasDown = false
+    private var pendingEntry: Entry? = null
+
+    private fun leftDown(): Boolean {
+        try {
+            val mc = Minecraft.getInstance()
+            val mh = Minecraft::class.java.getField("mouseHandler").get(mc)
+            val m = mh.javaClass.methods.firstOrNull { it.name == "isLeftPressed" && it.parameterCount == 0 }
+            if (m != null) return m.invoke(mh) as Boolean
+        } catch (t: Throwable) {
+        }
+        return false
+    }
+
+    fun commit() {
+        val e = pendingEntry ?: return
+        pendingEntry = null
+        Highlights.add(Minecraft.getInstance(), e.boxes)
+        DebugLog.log("selected " + e.name)
+        onClose()
+    }
 
     private fun fmt(n: Int): String {
         if (n >= 1000000) return (n / 1000000).toString() + "M"
@@ -81,6 +102,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         search.setResponder { _ -> scroll = 0; refilter() }
         addWidget(search)
         setInitialFocus(search)
+        wasDown = leftDown()
         DebugLog.log("screen opened entries=" + all.size.toString() + " w=" + width.toString() + " h=" + height.toString())
         refilter()
     }
@@ -133,6 +155,13 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
 
         val hover = entryAt(mouseX.toDouble(), mouseY.toDouble())
         hovered = hover
+        val downNow = leftDown()
+        if (downNow && !wasDown && hover != null) {
+            pendingEntry = hover
+            FinderPending.screen = this
+            dbg = "poll click on " + hover.name
+        }
+        wasDown = downNow
         for (i in 0 until cols * rowsVis) {
             val sx = gx + (i % cols) * cell
             val sy = gy + (i / cols) * cell
@@ -224,4 +253,8 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     }
 
     override fun isPauseScreen(): Boolean = false
+}
+
+object FinderPending {
+    var screen: FinderScreen? = null
 }

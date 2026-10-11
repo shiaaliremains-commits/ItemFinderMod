@@ -53,6 +53,11 @@ object ItemFinderClient : ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { mc ->
             Highlights.tick(mc)
+            val fs = FinderPending.screen
+            if (fs != null) {
+                FinderPending.screen = null
+                fs.commit()
+            }
             while (key.consumeClick()) {
                 if (mc.level != null) {
                     show(mc, FinderScreen())
