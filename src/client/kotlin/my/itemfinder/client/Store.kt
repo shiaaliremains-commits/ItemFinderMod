@@ -36,7 +36,7 @@ object Store {
         return listOf(pos)
     }
 
-    // استقبال فحص السيرفر وتحديث كل الصناديق تلقائياً
+    // فك وتحديث الآيتمات بنظام 26.3 الحديث
     fun updateFromNetwork(mc: Minecraft, serverBoxes: List<SyncBoxData>) {
         val dim = dimOf(mc)
         boxes.removeIf { it.dim == dim }
@@ -44,7 +44,11 @@ object Store {
         for (sb in serverBoxes) {
             val itemMap = HashMap<Item, Int>()
             for ((idStr, count) in sb.items) {
-                val item = BuiltInRegistries.ITEM.get(Identifier.tryParse(idStr))
+                val id = Identifier.tryParse(idStr)
+                val item = if (id != null) {
+                    BuiltInRegistries.ITEM.get(id).map { it.value() }.orElse(null)
+                } else null
+
                 if (item != null && item != Items.AIR) {
                     itemMap[item] = count
                 }
