@@ -1,5 +1,6 @@
 package my.itemfinder.client
 
+import kotlin.math.abs
 import kotlin.math.sin
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
@@ -77,11 +78,25 @@ object Highlights {
         val eyePos = player.eyePosition
         val timeMs = System.currentTimeMillis()
 
+        // 1. تحديد مكان انطلاق الليزر:
+        // في منظور الشخص الأول ينطلق من جهة اليد اليمنى أسفل الشاشة لتراه بوضوح تام!
+        // في منظور الشخص الثالث ينطلق من منتصف الصدر
+        val isFirstPerson = mc.options.cameraType.isFirstPerson
+        val startPos = if (isFirstPerson) {
+            val look = player.lookAngle
+            val up = Vec3(0.0, 1.0, 0.0)
+            val right = if (abs(look.y) > 0.95) Vec3(1.0, 0.0, 0.0) else look.cross(up).normalize()
+            val realUp = right.cross(look).normalize()
+            eyePos.add(look.scale(0.35)).add(right.scale(0.24)).subtract(realUp.scale(0.20))
+        } else {
+            player.position().add(0.0, 1.1, 0.0)
+        }
+
         val rainbowTime = (timeMs % 3500L) / 3500f
         val rgb = rainbow(rainbowTime)
         val pulse = 0.5 + 0.5 * sin(timeMs / 180.0)
 
-        val beamCycle = ((timeMs % 1500L) / 1500.0)
+        val beamCycle = ((timeMs % 1400L) / 1400.0)
         val pingPong = if (beamCycle < 0.5) beamCycle * 2.0 else (1.0 - beamCycle) * 2.0
 
         for (h in list) {
@@ -93,11 +108,11 @@ object Highlights {
 
             if (masterAlpha <= 0f) continue
 
-            val box = AABB(h.pos).inflate(0.015 + 0.02 * pulse)
+            val box = AABB(h.pos).inflate(0.015 + 0.025 * pulse)
             val center = box.center
 
-            val strokeAlpha = ((150 + 105 * pulse) * masterAlpha).toInt()
-            val fillAlpha = ((35 + 40 * pulse) * masterAlpha).toInt()
+            val strokeAlpha = ((160 + 95 * pulse) * masterAlpha).toInt()
+            val fillAlpha = ((35 + 45 * pulse) * masterAlpha).toInt()
             val strokeColor = argb(strokeAlpha, rgb)
             val fillColor = argb(fillAlpha, rgb)
 
@@ -105,19 +120,28 @@ object Highlights {
             Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
             Gizmos.point(center, strokeColor, (5.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
 
-            // 2. خط نيون ناعم
-            val lineBaseAlpha = (50 * masterAlpha).toInt()
-            Gizmos.line(eyePos, center, argb(lineBaseAlpha, rgb), 1.2f).setAlwaysOnTop()
+            // 2. منارة عمودية ناعمة ترتفع من الصندوق مترين للأعلى لتدلك على مكانه
+            val beaconTop = center.add(0.0, 2.2, 0.0)
+            Gizmos.line(center, beaconTop, argb((130 * masterAlpha).toInt(), rgb), 2.0f).setAlwaysOnTop()
+            Gizmos.point(beaconTop, strokeColor, 4.5f).setAlwaysOnTop()
 
-            // 3. نبضة ليزر تسافر ذهاباً وإياباً
-            val pulseHead = lerp(eyePos, center, pingPong)
-            val trailDist = 0.12
+            // 3. خط الليزر الأساسي (مزدوج الطبقات: غلاف ملون + قلب أبيض مشع)
+            val outerColor = argb((70 * masterAlpha).toInt(), rgb)
+            val coreColor = argb((180 * masterAlpha).toInt(), 0xFFFFFF)
+            Gizmos.line(startPos, center, outerColor, 3.2f).setAlwaysOnTop()
+            Gizmos.line(startPos, center, coreColor, 1.2f).setAlwaysOnTop()
+
+            // 4. نبضة الليزر المنطلقة ذهاباً وإياباً (Ping-Pong)
+            val pulseHead = lerp(startPos, center, pingPong)
+            val trailDist = 0.15
             val trailT = (pingPong - (if (beamCycle < 0.5) trailDist else -trailDist)).coerceIn(0.0, 1.0)
-            val pulseTail = lerp(eyePos, center, trailT)
+            val pulseTail = lerp(startPos, center, trailT)
 
-            val pulseColor = argb((235 * masterAlpha).toInt(), rgb)
-            Gizmos.line(pulseHead, pulseTail, pulseColor, 3.0f).setAlwaysOnTop()
-            Gizmos.point(pulseHead, pulseColor, 5.5f).setAlwaysOnTop()
+            val pulseOuter = argb((240 * masterAlpha).toInt(), rgb)
+            val pulseCore = argb((255 * masterAlpha).toInt(), 0xFFFFFF)
+            Gizmos.line(pulseHead, pulseTail, pulseOuter, 4.5f).setAlwaysOnTop()
+            Gizmos.line(pulseHead, pulseTail, pulseCore, 2.0f).setAlwaysOnTop()
+            Gizmos.point(pulseHead, pulseOuter, 6.5f).setAlwaysOnTop()
         }
     }
 
@@ -130,7 +154,6 @@ object Highlights {
             return
         }
 
-        // تشغيل الـ Fade-out فور فتح الصندوق بأمان وبدون استخدام mc.screen المفقودة
         if (player.containerMenu != player.inventoryMenu) {
             val pPos = player.blockPosition()
             for (h in list) {
