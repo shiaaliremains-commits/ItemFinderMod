@@ -14,7 +14,8 @@ object Highlights {
         val pos: BlockPos,
         val startPos: Vec3,
         val startTimeMs: Long,
-        val travelDurationMs: Long = 2800L, // سفر هادئ وبطيء (2.8 ثانية)
+        val start: Int,
+        val travelDurationMs: Long = 2800L,
         var isFading: Boolean = false,
         var fadeStart: Int = 0,
         var fadeEnd: Int = 0
@@ -28,13 +29,12 @@ object Highlights {
         val player = mc.player ?: return
         val eyePos = player.eyePosition
         val look = player.lookAngle
-        // ينطلق المربع من أمام عين اللاعب مباشرة ليراه بوضوح
         val launchPos = eyePos.add(look.scale(0.65)).subtract(0.0, 0.2, 0.0)
         val nowMs = System.currentTimeMillis()
 
         for (b in boxes) {
             for (s in b.spots) {
-                list.add(H(b.dim, s, launchPos, nowMs))
+                list.add(H(b.dim, s, launchPos, nowMs, now))
             }
         }
     }
@@ -44,7 +44,7 @@ object Highlights {
             if (h.pos in spots && !h.isFading) {
                 h.isFading = true
                 h.fadeStart = now
-                h.fadeEnd = now + 25 // تلاشي ناعم لمدة ثانية وربع عند الفتح
+                h.fadeEnd = now + 25
             }
         }
     }
@@ -102,14 +102,11 @@ object Highlights {
             val elapsed = timeMs - h.startTimeMs
             val rawProgress = (elapsed.toDouble() / h.travelDurationMs.toDouble()).coerceIn(0.0, 1.0)
 
-            // انسيابية Cubic Ease-Out: ينطلق بسلاسة ويتباطأ بنعومة تامة عند الاقتراب من الصندوق
             val t = 1.0 - Math.pow(1.0 - rawProgress, 3.0)
 
             if (rawProgress < 1.0) {
-                // 1. مرحلة السفر لمرة واحدة: المربع يطير ببطء ونعومة فائقة من اللاعب للصندوق
                 val curCenter = lerp(h.startPos, destCenter, t)
 
-                // يتوسع حجم المربع بنعومة أثناء الطيران لغاية ما يطابق حجم الصندوق
                 val currentSize = 0.40 + (0.62 * t)
                 val half = currentSize / 2.0
                 val travelBox = AABB(
@@ -125,15 +122,12 @@ object Highlights {
                 Gizmos.cuboid(travelBox, GizmoStyle.strokeAndFill(strokeColor, 2.5f, fillColor)).setAlwaysOnTop()
                 Gizmos.point(curCenter, strokeColor, 6.0f).setAlwaysOnTop()
 
-                // أثر انسيابي ناعم خلف المربع
                 val trailT = (t - 0.08).coerceAtLeast(0.0)
                 val trailCenter = lerp(h.startPos, destCenter, trailT)
                 Gizmos.line(trailCenter, curCenter, argb((85 * masterAlpha).toInt(), rgb), 2.2f).setAlwaysOnTop()
             } else {
-                // 2. مرحلة الاستقرار: المربع وصل واستقر فوق الصندوق ويبقى ثابتاً هناك وينبض!
                 val timeSinceArrival = elapsed - h.travelDurationMs
 
-                // موجة نيون ارتدادية خفيفة في أول نصف ثانية عند لحظة الملامسة والاستقرار
                 val arrivalShockwave = if (timeSinceArrival < 500) {
                     (1.0 - (timeSinceArrival / 500.0)) * 0.12
                 } else 0.0
@@ -145,7 +139,6 @@ object Highlights {
                 val strokeColor = argb(strokeAlpha, rgb)
                 val fillColor = argb(fillAlpha, rgb)
 
-                // صندوق النيون المستقر فوق الصندوق يظهر من وراء الجدران وينبض بقوس قزح
                 Gizmos.cuboid(settledBox, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
                 Gizmos.point(destCenter, strokeColor, (5.5 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
             }
@@ -161,7 +154,6 @@ object Highlights {
             return
         }
 
-        // تشغيل الـ Fade-out التلقائي فور فتح الصندوق
         if (player.containerMenu != player.inventoryMenu) {
             val pPos = player.blockPosition()
             for (h in list) {
