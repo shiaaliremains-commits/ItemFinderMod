@@ -1,13 +1,11 @@
 package my.itemfinder.client
 
-import kotlin.math.abs
 import kotlin.math.sin
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.gizmos.GizmoStyle
 import net.minecraft.gizmos.Gizmos
 import net.minecraft.world.phys.AABB
-import net.minecraft.world.phys.Vec3
 
 object Highlights {
     class H(
@@ -27,7 +25,7 @@ object Highlights {
         list.clear()
         for (b in boxes) {
             for (s in b.spots) {
-                list.add(H(b.dim, s, now, now + 1200))
+                list.add(H(b.dim, s, now, now + 1200)) // 60 ثانية
             }
         }
     }
@@ -37,7 +35,7 @@ object Highlights {
             if (h.pos in spots && !h.isFading) {
                 h.isFading = true
                 h.fadeStart = now
-                h.fadeEnd = now + 25
+                h.fadeEnd = now + 25 // تلاشي ناعم لمدة ثانية ونصف
             }
         }
     }
@@ -66,38 +64,17 @@ object Highlights {
         return (r shl 16) or (g shl 8) or b
     }
 
-    private fun lerp(a: Vec3, b: Vec3, t: Double): Vec3 =
-        Vec3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t)
-
     fun render() {
         val mc = Minecraft.getInstance()
         val player = mc.player ?: return
         if (mc.level == null || list.isEmpty()) return
 
         val dim = Store.dimOf(mc)
-        val eyePos = player.eyePosition
         val timeMs = System.currentTimeMillis()
-
-        // 1. تحديد مكان انطلاق الليزر:
-        // في منظور الشخص الأول ينطلق من جهة اليد اليمنى أسفل الشاشة لتراه بوضوح تام!
-        // في منظور الشخص الثالث ينطلق من منتصف الصدر
-        val isFirstPerson = mc.options.cameraType.isFirstPerson
-        val startPos = if (isFirstPerson) {
-            val look = player.lookAngle
-            val up = Vec3(0.0, 1.0, 0.0)
-            val right = if (abs(look.y) > 0.95) Vec3(1.0, 0.0, 0.0) else look.cross(up).normalize()
-            val realUp = right.cross(look).normalize()
-            eyePos.add(look.scale(0.35)).add(right.scale(0.24)).subtract(realUp.scale(0.20))
-        } else {
-            player.position().add(0.0, 1.1, 0.0)
-        }
 
         val rainbowTime = (timeMs % 3500L) / 3500f
         val rgb = rainbow(rainbowTime)
         val pulse = 0.5 + 0.5 * sin(timeMs / 180.0)
-
-        val beamCycle = ((timeMs % 1400L) / 1400.0)
-        val pingPong = if (beamCycle < 0.5) beamCycle * 2.0 else (1.0 - beamCycle) * 2.0
 
         for (h in list) {
             if (h.dim != dim) continue
@@ -108,40 +85,33 @@ object Highlights {
 
             if (masterAlpha <= 0f) continue
 
-            val box = AABB(h.pos).inflate(0.015 + 0.025 * pulse)
+            val box = AABB(h.pos).inflate(0.015 + 0.02 * pulse)
             val center = box.center
 
             val strokeAlpha = ((160 + 95 * pulse) * masterAlpha).toInt()
-            val fillAlpha = ((35 + 45 * pulse) * masterAlpha).toInt()
+            val fillAlpha = ((35 + 40 * pulse) * masterAlpha).toInt()
             val strokeColor = argb(strokeAlpha, rgb)
             val fillColor = argb(fillAlpha, rgb)
 
-            // 1. صندوق نيون نابض بقوس قزح من وراء الجدران
+            // 1. صندوق نيون نابض بألوان قوس قزح يظهر من وراء الجدران
             Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
             Gizmos.point(center, strokeColor, (5.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
 
-            // 2. منارة عمودية ناعمة ترتفع من الصندوق مترين للأعلى لتدلك على مكانه
-            val beaconTop = center.add(0.0, 2.2, 0.0)
-            Gizmos.line(center, beaconTop, argb((130 * masterAlpha).toInt(), rgb), 2.0f).setAlwaysOnTop()
-            Gizmos.point(beaconTop, strokeColor, 4.5f).setAlwaysOnTop()
+            // 2. عمود نور سماوي (Sky Beacon Beam) يرتفع 40 بلوكة للسماء
+            // تشوفه بوضوح تام بمنظور الشخص الأول والثالث من أي مكان بالقاعدة!
+            val beamHeight = 40.0
+            val beamTop = center.add(0.0, beamHeight, 0.0)
+            val beamAlpha = (140 * masterAlpha).toInt()
+            val beamColor = argb(beamAlpha, rgb)
 
-            // 3. خط الليزر الأساسي (مزدوج الطبقات: غلاف ملون + قلب أبيض مشع)
-            val outerColor = argb((70 * masterAlpha).toInt(), rgb)
-            val coreColor = argb((180 * masterAlpha).toInt(), 0xFFFFFF)
-            Gizmos.line(startPos, center, outerColor, 3.2f).setAlwaysOnTop()
-            Gizmos.line(startPos, center, coreColor, 1.2f).setAlwaysOnTop()
+            // شعاع عمودي مضيء يخترق الأسقف للسماء
+            Gizmos.line(center, beamTop, beamColor, 2.5f).setAlwaysOnTop()
 
-            // 4. نبضة الليزر المنطلقة ذهاباً وإياباً (Ping-Pong)
-            val pulseHead = lerp(startPos, center, pingPong)
-            val trailDist = 0.15
-            val trailT = (pingPong - (if (beamCycle < 0.5) trailDist else -trailDist)).coerceIn(0.0, 1.0)
-            val pulseTail = lerp(startPos, center, trailT)
-
-            val pulseOuter = argb((240 * masterAlpha).toInt(), rgb)
-            val pulseCore = argb((255 * masterAlpha).toInt(), 0xFFFFFF)
-            Gizmos.line(pulseHead, pulseTail, pulseOuter, 4.5f).setAlwaysOnTop()
-            Gizmos.line(pulseHead, pulseTail, pulseCore, 2.0f).setAlwaysOnTop()
-            Gizmos.point(pulseHead, pulseOuter, 6.5f).setAlwaysOnTop()
+            // نجوم مضيئة على طول العمود السماوي
+            for (step in 1..4) {
+                val nodePos = center.add(0.0, (beamHeight / 4.0) * step, 0.0)
+                Gizmos.point(nodePos, beamColor, (4.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
+            }
         }
     }
 
@@ -154,6 +124,7 @@ object Highlights {
             return
         }
 
+        // تشغيل الـ Fade-out فور فتح الصندوق
         if (player.containerMenu != player.inventoryMenu) {
             val pPos = player.blockPosition()
             for (h in list) {

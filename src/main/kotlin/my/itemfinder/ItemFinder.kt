@@ -21,17 +21,18 @@ object ItemFinder : ModInitializer {
 
         ServerPlayNetworking.registerGlobalReceiver(RequestChestsPayload.TYPE) { _, context ->
             val player = context.player()
-            scanAllLoadedChests(player)
+            scanLocalLoadedChests(player)
         }
 
-        LOGGER.info("ItemFinder Server Scanner initialized.")
+        LOGGER.info("ItemFinder Local Scanner initialized.")
     }
 
-    private fun scanAllLoadedChests(player: ServerPlayer) {
+    // فحص الشنكات القريبة فقط (نطاق قاعدتك 70 إلى 80 بلوكة)
+    private fun scanLocalLoadedChests(player: ServerPlayer) {
         val level = player.level() as? ServerLevel ?: return
         val chunkX = player.blockX shr 4
         val chunkZ = player.blockZ shr 4
-        val radius = 8
+        val radius = 4 // 4 شنكات فقط = نطاق محلي مريح وسريع 0ms
 
         val results = ArrayList<SyncBoxData>()
 
