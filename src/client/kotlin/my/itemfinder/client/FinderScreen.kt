@@ -12,6 +12,10 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 
+object FinderActive {
+    var screen: FinderScreen? = null
+}
+
 class FinderScreen : Screen(Component.literal("Item Finder")) {
 
     class Entry(val stack: ItemStack, val total: Int, val boxes: List<Box>, val name: String)
@@ -73,6 +77,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         return n.toString()
     }
 
+    // تحديث فوري مباشر بأجزاء من الثانية فور وصول رد السيرفر
     fun refreshFromNetwork() {
         buildEntries()
         refilter()
@@ -109,8 +114,14 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         return (rows - rowsVis).coerceAtLeast(0)
     }
 
+    override fun onClose() {
+        FinderActive.screen = null
+        super.onClose()
+    }
+
     override fun init() {
-        // إرسال طلب فحص فوري للسيرفر لقراءة كل الصناديق المحملة حولك
+        FinderActive.screen = this
+        // إرسال طلب الفحص للسيرفر
         ClientPlayNetworking.send(RequestChestsPayload())
 
         buildEntries()

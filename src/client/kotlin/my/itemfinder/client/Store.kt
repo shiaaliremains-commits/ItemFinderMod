@@ -20,8 +20,6 @@ class Box(val dim: String, val spots: List<BlockPos>, val items: Map<Item, Int>)
 
 object Store {
     val boxes = ArrayList<Box>()
-    var lastPos: BlockPos? = null
-    var lastTick: Int = 0
 
     fun dimOf(mc: Minecraft): String {
         val lvl = mc.level ?: return ""
@@ -61,7 +59,6 @@ object Store {
         val level = mc.level ?: return
         if (menu !is ChestMenu && menu !is ShulkerBoxMenu) return
 
-        // تفعيل الـ Fade-Out فور فتح الصندوق
         val spots = partners(level, pos)
         Highlights.fadeOut(spots)
 

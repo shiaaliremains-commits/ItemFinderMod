@@ -21,12 +21,12 @@ object ItemFinderClient : ClientModInitializer {
             KeyMapping("key.itemfinder.find", InputConstants.KEY_Y, category)
         )
 
+        // استقبال وتحديث الشاشة في نفس اللحظة بأعلى سرعة
         ClientPlayNetworking.registerGlobalReceiver(SyncChestsPayload.TYPE) { payload, context ->
             val mc = context.client()
-            Store.updateFromNetwork(mc, payload.boxes)
-            val scr = getCurrentScreen(mc)
-            if (scr is FinderScreen) {
-                scr.refreshFromNetwork()
+            mc.execute {
+                Store.updateFromNetwork(mc, payload.boxes)
+                FinderActive.screen?.refreshFromNetwork()
             }
         }
 
@@ -40,22 +40,6 @@ object ItemFinderClient : ClientModInitializer {
             Highlights.tick(client)
             Highlights.render()
         }
-    }
-
-    fun getCurrentScreen(mc: Minecraft): Screen? {
-        val method = mc.javaClass.methods.firstOrNull {
-            (it.name == "screen" || it.name == "getScreen") && it.parameterCount == 0 && Screen::class.java.isAssignableFrom(it.returnType)
-        }
-        if (method != null) {
-            return runCatching { method.invoke(mc) as? Screen }.getOrNull()
-        }
-        val field = mc.javaClass.fields.firstOrNull {
-            Screen::class.java.isAssignableFrom(it.type)
-        } ?: mc.javaClass.declaredFields.firstOrNull {
-            Screen::class.java.isAssignableFrom(it.type)
-        }
-        field?.isAccessible = true
-        return runCatching { field?.get(mc) as? Screen }.getOrNull()
     }
 
     fun openScreen(screen: Screen?) {
