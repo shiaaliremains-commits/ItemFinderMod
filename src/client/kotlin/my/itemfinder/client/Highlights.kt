@@ -1,6 +1,5 @@
 package my.itemfinder.client
 
-import kotlin.math.abs
 import kotlin.math.sin
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
@@ -13,8 +12,9 @@ object Highlights {
     class H(
         val dim: String,
         val pos: BlockPos,
-        val start: Int,
-        val end: Int,
+        val startPos: Vec3,
+        val startTimeMs: Long,
+        val travelDurationMs: Long = 2800L, // سفر هادئ وبطيء (2.8 ثانية)
         var isFading: Boolean = false,
         var fadeStart: Int = 0,
         var fadeEnd: Int = 0
@@ -25,9 +25,16 @@ object Highlights {
 
     fun add(mc: Minecraft, boxes: List<Box>) {
         list.clear()
+        val player = mc.player ?: return
+        val eyePos = player.eyePosition
+        val look = player.lookAngle
+        // ينطلق المربع من أمام عين اللاعب مباشرة ليراه بوضوح
+        val launchPos = eyePos.add(look.scale(0.65)).subtract(0.0, 0.2, 0.0)
+        val nowMs = System.currentTimeMillis()
+
         for (b in boxes) {
             for (s in b.spots) {
-                list.add(H(b.dim, s, now, now + 1200)) // 60 ثانية
+                list.add(H(b.dim, s, launchPos, nowMs))
             }
         }
     }
@@ -37,7 +44,7 @@ object Highlights {
             if (h.pos in spots && !h.isFading) {
                 h.isFading = true
                 h.fadeStart = now
-                h.fadeEnd = now + 25 // تلاشي ناعم لمدة ثانية ونصف
+                h.fadeEnd = now + 25 // تلاشي ناعم لمدة ثانية وربع عند الفتح
             }
         }
     }
@@ -71,34 +78,14 @@ object Highlights {
 
     fun render() {
         val mc = Minecraft.getInstance()
-        val player = mc.player ?: return
         if (mc.level == null || list.isEmpty()) return
 
         val dim = Store.dimOf(mc)
-        val eyePos = player.eyePosition
         val timeMs = System.currentTimeMillis()
-
-        // مكان انطلاق المكعب المرشد (أمام اللاعب مباشرة ليكون مرئياً بالكامل بمنظور الشخص الأول)
-        val isFirstPerson = mc.options.cameraType.isFirstPerson
-        val startPos = if (isFirstPerson) {
-            val look = player.lookAngle
-            val up = Vec3(0.0, 1.0, 0.0)
-            val right = if (abs(look.y) > 0.95) Vec3(1.0, 0.0, 0.0) else look.cross(up).normalize()
-            val realUp = right.cross(look).normalize()
-            eyePos.add(look.scale(0.5)).add(right.scale(0.18)).subtract(realUp.scale(0.15))
-        } else {
-            player.position().add(0.0, 1.1, 0.0)
-        }
 
         val rainbowTime = (timeMs % 3500L) / 3500f
         val rgb = rainbow(rainbowTime)
         val pulse = 0.5 + 0.5 * sin(timeMs / 180.0)
-
-        // أنيميشن طيران وسفر المكعب المرشد (دورة كاملة كل ثانيتين)
-        val travelDuration = 1800.0
-        val rawProgress = (timeMs % travelDuration) / travelDuration
-        // حركة Smoothstep لانطلاق ووصول ناعم جداً
-        val progress = rawProgress * rawProgress * (3.0 - 2.0 * rawProgress)
 
         for (h in list) {
             if (h.dim != dim) continue
@@ -109,41 +96,59 @@ object Highlights {
 
             if (masterAlpha <= 0f) continue
 
-            val box = AABB(h.pos).inflate(0.015 + 0.02 * pulse)
-            val center = box.center
+            val destAABB = AABB(h.pos)
+            val destCenter = destAABB.center
 
-            val strokeAlpha = ((160 + 95 * pulse) * masterAlpha).toInt()
-            val fillAlpha = ((35 + 40 * pulse) * masterAlpha).toInt()
-            val strokeColor = argb(strokeAlpha, rgb)
-            val fillColor = argb(fillAlpha, rgb)
+            val elapsed = timeMs - h.startTimeMs
+            val rawProgress = (elapsed.toDouble() / h.travelDurationMs.toDouble()).coerceIn(0.0, 1.0)
 
-            // 1. صندوق نيون نابض بقوس قزح على الصندوق الهدف نفسه يظهر من وراء الجدران
-            Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
-            Gizmos.point(center, strokeColor, (5.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
+            // انسيابية Cubic Ease-Out: ينطلق بسلاسة ويتباطأ بنعومة تامة عند الاقتراب من الصندوق
+            val t = 1.0 - Math.pow(1.0 - rawProgress, 3.0)
 
-            // 2. المكعب المرشد المنطلق (The Guiding Cube) الذي يسافر من عندك للصندوق
-            val currentGuidePos = lerp(startPos, center, progress)
+            if (rawProgress < 1.0) {
+                // 1. مرحلة السفر لمرة واحدة: المربع يطير ببطء ونعومة فائقة من اللاعب للصندوق
+                val curCenter = lerp(h.startPos, destCenter, t)
 
-            // حجم المكعب المرشد وهو يطير
-            val guideSize = 0.22 + 0.06 * sin(timeMs / 100.0)
-            val guideBox = AABB(
-                currentGuidePos.x - guideSize, currentGuidePos.y - guideSize, currentGuidePos.z - guideSize,
-                currentGuidePos.x + guideSize, currentGuidePos.y + guideSize, currentGuidePos.z + guideSize
-            )
+                // يتوسع حجم المربع بنعومة أثناء الطيران لغاية ما يطابق حجم الصندوق
+                val currentSize = 0.40 + (0.62 * t)
+                val half = currentSize / 2.0
+                val travelBox = AABB(
+                    curCenter.x - half, curCenter.y - half, curCenter.z - half,
+                    curCenter.x + half, curCenter.y + half, curCenter.z + half
+                )
 
-            val guideAlpha = (220 * masterAlpha).toInt()
-            val guideColor = argb(guideAlpha, rgb)
-            val guideFill = argb((60 * masterAlpha).toInt(), rgb)
+                val strokeAlpha = ((190 + 65 * pulse) * masterAlpha).toInt()
+                val fillAlpha = ((40 + 30 * pulse) * masterAlpha).toInt()
+                val strokeColor = argb(strokeAlpha, rgb)
+                val fillColor = argb(fillAlpha, rgb)
 
-            // رسم المكعب المرشد المنطلق بالهواء باتجاه الصندوق
-            Gizmos.cuboid(guideBox, GizmoStyle.strokeAndFill(guideColor, 2.5f, guideFill)).setAlwaysOnTop()
-            Gizmos.point(currentGuidePos, guideColor, 6.0f).setAlwaysOnTop()
+                Gizmos.cuboid(travelBox, GizmoStyle.strokeAndFill(strokeColor, 2.5f, fillColor)).setAlwaysOnTop()
+                Gizmos.point(curCenter, strokeColor, 6.0f).setAlwaysOnTop()
 
-            // 3. ذيل ناعم وخافت يوضح المسار خلف المكعب المرشد
-            val tailProgress = (progress - 0.12).coerceAtLeast(0.0)
-            val tailPos = lerp(startPos, center, tailProgress)
-            val trailAlpha = (75 * masterAlpha).toInt()
-            Gizmos.line(tailPos, currentGuidePos, argb(trailAlpha, rgb), 2.2f).setAlwaysOnTop()
+                // أثر انسيابي ناعم خلف المربع
+                val trailT = (t - 0.08).coerceAtLeast(0.0)
+                val trailCenter = lerp(h.startPos, destCenter, trailT)
+                Gizmos.line(trailCenter, curCenter, argb((85 * masterAlpha).toInt(), rgb), 2.2f).setAlwaysOnTop()
+            } else {
+                // 2. مرحلة الاستقرار: المربع وصل واستقر فوق الصندوق ويبقى ثابتاً هناك وينبض!
+                val timeSinceArrival = elapsed - h.travelDurationMs
+
+                // موجة نيون ارتدادية خفيفة في أول نصف ثانية عند لحظة الملامسة والاستقرار
+                val arrivalShockwave = if (timeSinceArrival < 500) {
+                    (1.0 - (timeSinceArrival / 500.0)) * 0.12
+                } else 0.0
+
+                val settledBox = destAABB.inflate(0.02 + 0.025 * pulse + arrivalShockwave)
+
+                val strokeAlpha = ((160 + 95 * pulse) * masterAlpha).toInt()
+                val fillAlpha = ((35 + 40 * pulse) * masterAlpha).toInt()
+                val strokeColor = argb(strokeAlpha, rgb)
+                val fillColor = argb(fillAlpha, rgb)
+
+                // صندوق النيون المستقر فوق الصندوق يظهر من وراء الجدران وينبض بقوس قزح
+                Gizmos.cuboid(settledBox, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
+                Gizmos.point(destCenter, strokeColor, (5.5 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
+            }
         }
     }
 
@@ -166,6 +171,6 @@ object Highlights {
             }
         }
 
-        list.removeIf { h -> (h.isFading && now >= h.fadeEnd) || (!h.isFading && now > h.end) }
+        list.removeIf { h -> (h.isFading && now >= h.fadeEnd) || (!h.isFading && now > (h.start + 1200)) }
     }
 }
