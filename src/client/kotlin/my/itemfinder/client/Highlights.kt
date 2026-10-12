@@ -26,18 +26,17 @@ object Highlights {
         list.clear()
         for (b in boxes) {
             for (s in b.spots) {
-                list.add(H(b.dim, s, now, now + 1200)) // يستمر التحديد لـ 60 ثانية
+                list.add(H(b.dim, s, now, now + 1200))
             }
         }
     }
 
-    // تشغيل أنيميشن الـ Fade-out الناعم عند فتح الصندوق
     fun fadeOut(spots: List<BlockPos>) {
         for (h in list) {
             if (h.pos in spots && !h.isFading) {
                 h.isFading = true
                 h.fadeStart = now
-                h.fadeEnd = now + 25 // يتلاشى تدريجياً لثانية ونصف
+                h.fadeEnd = now + 25
             }
         }
     }
@@ -48,7 +47,6 @@ object Highlights {
 
     private fun argb(alpha: Int, rgb: Int): Int = (alpha.coerceIn(0, 255) shl 24) or (rgb and 0xFFFFFF)
 
-    // توليد ألوان قوس قزح الانسيابية
     private fun rainbow(t: Float): Int {
         val h = (t * 6f) % 6f
         val i = h.toInt()
@@ -79,19 +77,16 @@ object Highlights {
         val eyePos = player.eyePosition
         val timeMs = System.currentTimeMillis()
 
-        // ألوان قوس قزح ونبض تنفسي ناعم
         val rainbowTime = (timeMs % 3500L) / 3500f
         val rgb = rainbow(rainbowTime)
         val pulse = 0.5 + 0.5 * sin(timeMs / 180.0)
 
-        // أنيميشن حركة انطلاق ورجوع الليزر ذهاباً وإياباً (Ping-Pong Beam)
         val beamCycle = ((timeMs % 1500L) / 1500.0)
         val pingPong = if (beamCycle < 0.5) beamCycle * 2.0 else (1.0 - beamCycle) * 2.0
 
         for (h in list) {
             if (h.dim != dim) continue
 
-            // حساب نسبة التلاشي (Fade-Out) عند فتح الصندوق
             val masterAlpha = if (h.isFading) {
                 ((h.fadeEnd - now).toFloat() / 25f).coerceIn(0f, 1f)
             } else 1.0f
@@ -106,15 +101,15 @@ object Highlights {
             val strokeColor = argb(strokeAlpha, rgb)
             val fillColor = argb(fillAlpha, rgb)
 
-            // 1. صندوق قوس قزح المتوهج النابض الذي يظهر من وراء الجدران
+            // 1. صندوق نيون نابض بقوس قزح من وراء الجدران
             Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
             Gizmos.point(center, strokeColor, (5.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
 
-            // 2. خط نيون ناعم وثابت يربط نظرك بالصندوق
+            // 2. خط نيون ناعم
             val lineBaseAlpha = (50 * masterAlpha).toInt()
             Gizmos.line(eyePos, center, argb(lineBaseAlpha, rgb), 1.2f).setAlwaysOnTop()
 
-            // 3. نبضة الليزر المنطلقة من اللاعب للصندوق وراجعة لك بحركة مستمرة
+            // 3. نبضة ليزر تسافر ذهاباً وإياباً
             val pulseHead = lerp(eyePos, center, pingPong)
             val trailDist = 0.12
             val trailT = (pingPong - (if (beamCycle < 0.5) trailDist else -trailDist)).coerceIn(0.0, 1.0)
@@ -128,17 +123,18 @@ object Highlights {
 
     fun tick(mc: Minecraft) {
         now++
-        if (mc.level == null || mc.player == null) {
+        val player = mc.player
+        val level = mc.level
+        if (level == null || player == null) {
             list.clear()
             return
         }
 
-        // تشغيل الـ Fade-out تلقائياً أول ما اللاعب يقترب ويفتح الصندوق
-        val player = mc.player
-        if (player != null && mc.screen != null && mc.screen !is FinderScreen) {
+        // تشغيل الـ Fade-out فور فتح الصندوق بأمان وبدون استخدام mc.screen المفقودة
+        if (player.containerMenu != player.inventoryMenu) {
             val pPos = player.blockPosition()
             for (h in list) {
-                if (!h.isFading && h.pos.closerThan(pPos, 4.2)) {
+                if (!h.isFading && h.pos.closerThan(pPos, 4.5)) {
                     fadeOut(listOf(h.pos))
                 }
             }
