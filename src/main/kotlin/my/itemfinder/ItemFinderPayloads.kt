@@ -8,15 +8,19 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 
 class SyncBoxData(val pos: BlockPos, val items: Map<String, Int>)
 
-class RequestChestsPayload : CustomPacketPayload {
+class RequestChestsPayload(val ping: Int = 1) : CustomPacketPayload {
     override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> = TYPE
 
     companion object {
         val TYPE: CustomPacketPayload.Type<RequestChestsPayload> =
             CustomPacketPayload.Type(ItemFinder.id("request_chests"))
 
+        // إرسال بايت صريح حتى Netty ما يعتبر الحزمة فارغة وتالفة
         val CODEC: StreamCodec<RegistryFriendlyByteBuf, RequestChestsPayload> =
-            StreamCodec.unit(RequestChestsPayload())
+            StreamCodec.composite(
+                ByteBufCodecs.VAR_INT, { p: RequestChestsPayload -> p.ping },
+                { p -> RequestChestsPayload(p) }
+            )
     }
 }
 
