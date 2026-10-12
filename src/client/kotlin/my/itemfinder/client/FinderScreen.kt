@@ -1,5 +1,7 @@
 package my.itemfinder.client
 
+import my.itemfinder.RequestChestsPayload
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.EditBox
@@ -71,6 +73,11 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
         return n.toString()
     }
 
+    fun refreshFromNetwork() {
+        buildEntries()
+        refilter()
+    }
+
     private fun buildEntries() {
         val mc = Minecraft.getInstance()
         val dim = Store.dimOf(mc)
@@ -103,6 +110,9 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
     }
 
     override fun init() {
+        // إرسال طلب فحص فوري للسيرفر لقراءة كل الصناديق المحملة حولك
+        ClientPlayNetworking.send(RequestChestsPayload())
+
         buildEntries()
         rowsVis = ((height - 56 - 40 - 20) / cell).coerceIn(2, 6)
         panelH = 56 + rowsVis * cell + 6 + 26 + 8
@@ -191,7 +201,7 @@ class FinderScreen : Screen(Component.literal("Item Finder")) {
             }
         }
         if (shown.isEmpty()) {
-            g.text(font, "No items found. Open some chests first!", gx + 8, gy + 40, c(0xFFF0883E))
+            g.text(font, "Scanning loaded chests in world...", gx + 8, gy + 40, c(0xFFF0883E))
         }
 
         val tx = px + 234

@@ -1,73 +1,60 @@
 package my.itemfinder.client
 
 import com.mojang.blaze3d.platform.InputConstants
+import my.itemfinder.ItemFinder
+import my.itemfinder.SyncChestsPayload
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
-import net.fabricmc.fabric.api.event.player.UseBlockCallback
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.resources.Identifier
-import net.minecraft.world.InteractionResult
 
 object ItemFinderClient : ClientModInitializer {
-
-    private fun show(mc: Minecraft, s: Screen) {
-        val methods = Minecraft::class.java.methods
-        val m = methods.firstOrNull { it.name == "setScreenAndShow" && it.parameterCount == 1 }
-            ?: methods.first { it.name == "setScreen" && it.parameterCount == 1 }
-        try { m.invoke(mc, s) } catch (t: Throwable) { DebugLog.error("open screen", t) }
-    }
+    private lateinit var findKey: KeyMapping
 
     override fun onInitializeClient() {
-        val cat = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("itemfinder", "main"))
-        val key = KeyMappingHelper.registerKeyMapping(
-            KeyMapping("key.itemfinder.open", InputConstants.KEY_K, cat)
+        val category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(ItemFinder.MOD_ID, "main"))
+        findKey = KeyMappingHelper.registerKeyMapping(
+            KeyMapping("key.itemfinder.find", InputConstants.KEY_Y, category)
         )
 
-        UseBlockCallback.EVENT.register(UseBlockCallback { _, world, _, hit ->
-            if (world.isClientSide) {
-                Store.lastPos = hit.blockPos
-                Store.lastTick = Highlights.now
+        // استقبال بيانات كل الصناديق من السيرفر فوراً
+        ClientPlayNetworking.registerGlobalReceiver(SyncChestsPayload.TYPE) { payload, context ->
+            val mc = context.client()
+            Store.updateFromNetwork(mc, payload.boxes)
+            val scr = mc.screen
+            if (scr is FinderScreen) {
+                scr.refreshFromNetwork()
             }
-            InteractionResult.PASS
-        })
+        }
 
-        ScreenEvents.AFTER_INIT.register(ScreenEvents.AfterInit { client, screen, _, _ ->
-            if (screen is AbstractContainerScreen<*>) {
-                val pos = Store.lastPos
-                Store.lastPos = null
-                val level = client.level
-                if (pos != null && level != null) {
-                    Highlights.removeAt(Store.partners(level, pos))
+        ClientTickEvents.END_CLIENT_TICK.register { client ->
+            while (findKey.consumeClick()) {
+                if (client.player != null) {
+                    openScreen(FinderScreen())
                 }
-                val menu = screen.menu
-                ScreenEvents.remove(screen).register(ScreenEvents.Remove {
-                    Store.capture(client, menu, pos)
-                })
             }
-        })
 
-        LevelRenderEvents.BEFORE_GIZMOS.register(LevelRenderEvents.BeforeGizmos { _ ->
+            Highlights.tick(client)
             Highlights.render()
-        })
+        }
+    }
 
-        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { mc ->
-            Highlights.tick(mc)
-            val fs = FinderPending.screen
-            if (fs != null) {
-                FinderPending.screen = null
-                fs.commit()
-            }
-            while (key.consumeClick()) {
-                if (mc.level != null) {
-                    show(mc, FinderScreen())
-                }
-            }
-        })
+    fun openScreen(screen: Screen?) {
+        val mc = Minecraft.getInstance()
+        val gui = runCatching { mc.javaClass.getField("gui").get(mc) }.getOrNull()
+        if (!invokeSetScreen(gui, screen)) invokeSetScreen(mc, screen)
+    }
+
+    private fun invokeSetScreen(target: Any?, screen: Screen?): Boolean {
+        if (target == null) return false
+        val method = target.javaClass.methods.firstOrNull {
+            (it.name == "setScreen" || it.name == "setScreenAndShow") && it.parameterCount == 1
+        } ?: return false
+        method.invoke(target, screen)
+        return true
     }
 }

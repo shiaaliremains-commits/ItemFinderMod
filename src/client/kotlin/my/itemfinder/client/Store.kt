@@ -1,13 +1,17 @@
 package my.itemfinder.client
 
+import my.itemfinder.SyncBoxData
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.resources.Identifier
 import net.minecraft.world.Container
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.ShulkerBoxMenu
 import net.minecraft.world.item.Item
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.ChestBlock
 import net.minecraft.world.level.block.state.properties.ChestType
@@ -30,6 +34,23 @@ object Store {
             return listOf(pos, pos.relative(ChestBlock.getConnectedDirection(st)))
         }
         return listOf(pos)
+    }
+
+    // استقبال فحص السيرفر وتحديث كل الصناديق تلقائياً
+    fun updateFromNetwork(mc: Minecraft, serverBoxes: List<SyncBoxData>) {
+        val dim = dimOf(mc)
+        boxes.removeIf { it.dim == dim }
+
+        for (sb in serverBoxes) {
+            val itemMap = HashMap<Item, Int>()
+            for ((idStr, count) in sb.items) {
+                val item = BuiltInRegistries.ITEM.get(Identifier.tryParse(idStr))
+                if (item != null && item != Items.AIR) {
+                    itemMap[item] = count
+                }
+            }
+            boxes.add(Box(dim, listOf(sb.pos), itemMap))
+        }
     }
 
     fun capture(mc: Minecraft, menu: AbstractContainerMenu, pos: BlockPos?) {
