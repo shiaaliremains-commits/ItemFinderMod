@@ -36,7 +36,6 @@ object Store {
         return listOf(pos)
     }
 
-    // فك وتحديث الآيتمات بنظام 26.3 الحديث
     fun updateFromNetwork(mc: Minecraft, serverBoxes: List<SyncBoxData>) {
         val dim = dimOf(mc)
         boxes.removeIf { it.dim == dim }
@@ -59,9 +58,13 @@ object Store {
 
     fun capture(mc: Minecraft, menu: AbstractContainerMenu, pos: BlockPos?) {
         if (pos == null) return
-        if (Highlights.now - lastTick > 100) return
         val level = mc.level ?: return
         if (menu !is ChestMenu && menu !is ShulkerBoxMenu) return
+
+        // تفعيل الـ Fade-Out فور فتح الصندوق
+        val spots = partners(level, pos)
+        Highlights.fadeOut(spots)
+
         val be = level.getBlockEntity(pos)
         if (be !is Container) return
         val totals = LinkedHashMap<Item, Int>()
@@ -72,7 +75,7 @@ object Store {
                 totals.merge(st.item, st.count) { a, b -> a + b }
             }
         }
-        val spots = partners(level, pos)
+
         val dim = dimOf(mc)
         boxes.removeIf { b -> b.dim == dim && b.spots.any { s -> s in spots } }
         boxes.add(Box(dim, spots, totals))
