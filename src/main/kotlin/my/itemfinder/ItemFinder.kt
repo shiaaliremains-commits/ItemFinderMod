@@ -5,8 +5,10 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.resources.Identifier
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
+import net.minecraft.world.level.chunk.LevelChunk
 import org.slf4j.LoggerFactory
 
 object ItemFinder : ModInitializer {
@@ -14,11 +16,9 @@ object ItemFinder : ModInitializer {
     private val LOGGER = LoggerFactory.getLogger(MOD_ID)
 
     override fun onInitialize() {
-        // تسجيل حزم النتورك
         PayloadTypeRegistry.serverboundPlay().register(RequestChestsPayload.TYPE, RequestChestsPayload.CODEC)
         PayloadTypeRegistry.clientboundPlay().register(SyncChestsPayload.TYPE, SyncChestsPayload.CODEC)
 
-        // فحص كل الصناديق المحملة حول اللاعب فور طلب البحث
         ServerPlayNetworking.registerGlobalReceiver(RequestChestsPayload.TYPE) { _, context ->
             val player = context.player()
             scanAllLoadedChests(player)
@@ -28,17 +28,18 @@ object ItemFinder : ModInitializer {
     }
 
     private fun scanAllLoadedChests(player: ServerPlayer) {
-        val level = player.serverLevel()
+        val level = player.level() as? ServerLevel ?: return
         val chunkX = player.blockX shr 4
         val chunkZ = player.blockZ shr 4
-        val radius = 8 // فحص دائرة 8 شنكات حول اللاعب = 256 بلوكة!
+        val radius = 8
 
         val results = ArrayList<SyncBoxData>()
 
         for (cx in (chunkX - radius)..(chunkX + radius)) {
             for (cz in (chunkZ - radius)..(chunkZ + radius)) {
-                val chunk = level.chunkSource.getChunkNow(cx, cz) ?: continue
-                for ((pos, blockEntity) in chunk.blockEntities) {
+                val chunk = level.chunkSource.getChunkNow(cx, cz) as? LevelChunk ?: continue
+                for (pos in chunk.blockEntitiesPos) {
+                    val blockEntity = level.getBlockEntity(pos) ?: continue
                     if (blockEntity is Container) {
                         val itemsMap = HashMap<String, Int>()
                         for (i in 0 until blockEntity.containerSize) {
@@ -56,7 +57,6 @@ object ItemFinder : ModInitializer {
             }
         }
 
-        // إرسال كل الصناديق ومحتوياتها للكلاينت فوراً
         ServerPlayNetworking.send(player, SyncChestsPayload(results))
     }
 
