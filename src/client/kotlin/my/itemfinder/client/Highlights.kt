@@ -1,11 +1,13 @@
 package my.itemfinder.client
 
+import kotlin.math.abs
 import kotlin.math.sin
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.gizmos.GizmoStyle
 import net.minecraft.gizmos.Gizmos
 import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 
 object Highlights {
     class H(
@@ -64,17 +66,39 @@ object Highlights {
         return (r shl 16) or (g shl 8) or b
     }
 
+    private fun lerp(a: Vec3, b: Vec3, t: Double): Vec3 =
+        Vec3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t)
+
     fun render() {
         val mc = Minecraft.getInstance()
         val player = mc.player ?: return
         if (mc.level == null || list.isEmpty()) return
 
         val dim = Store.dimOf(mc)
+        val eyePos = player.eyePosition
         val timeMs = System.currentTimeMillis()
+
+        // مكان انطلاق المكعب المرشد (أمام اللاعب مباشرة ليكون مرئياً بالكامل بمنظور الشخص الأول)
+        val isFirstPerson = mc.options.cameraType.isFirstPerson
+        val startPos = if (isFirstPerson) {
+            val look = player.lookAngle
+            val up = Vec3(0.0, 1.0, 0.0)
+            val right = if (abs(look.y) > 0.95) Vec3(1.0, 0.0, 0.0) else look.cross(up).normalize()
+            val realUp = right.cross(look).normalize()
+            eyePos.add(look.scale(0.5)).add(right.scale(0.18)).subtract(realUp.scale(0.15))
+        } else {
+            player.position().add(0.0, 1.1, 0.0)
+        }
 
         val rainbowTime = (timeMs % 3500L) / 3500f
         val rgb = rainbow(rainbowTime)
         val pulse = 0.5 + 0.5 * sin(timeMs / 180.0)
+
+        // أنيميشن طيران وسفر المكعب المرشد (دورة كاملة كل ثانيتين)
+        val travelDuration = 1800.0
+        val rawProgress = (timeMs % travelDuration) / travelDuration
+        // حركة Smoothstep لانطلاق ووصول ناعم جداً
+        val progress = rawProgress * rawProgress * (3.0 - 2.0 * rawProgress)
 
         for (h in list) {
             if (h.dim != dim) continue
@@ -93,25 +117,33 @@ object Highlights {
             val strokeColor = argb(strokeAlpha, rgb)
             val fillColor = argb(fillAlpha, rgb)
 
-            // 1. صندوق نيون نابض بألوان قوس قزح يظهر من وراء الجدران
+            // 1. صندوق نيون نابض بقوس قزح على الصندوق الهدف نفسه يظهر من وراء الجدران
             Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeColor, (2.2 + 1.2 * pulse).toFloat(), fillColor)).setAlwaysOnTop()
             Gizmos.point(center, strokeColor, (5.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
 
-            // 2. عمود نور سماوي (Sky Beacon Beam) يرتفع 40 بلوكة للسماء
-            // تشوفه بوضوح تام بمنظور الشخص الأول والثالث من أي مكان بالقاعدة!
-            val beamHeight = 40.0
-            val beamTop = center.add(0.0, beamHeight, 0.0)
-            val beamAlpha = (140 * masterAlpha).toInt()
-            val beamColor = argb(beamAlpha, rgb)
+            // 2. المكعب المرشد المنطلق (The Guiding Cube) الذي يسافر من عندك للصندوق
+            val currentGuidePos = lerp(startPos, center, progress)
 
-            // شعاع عمودي مضيء يخترق الأسقف للسماء
-            Gizmos.line(center, beamTop, beamColor, 2.5f).setAlwaysOnTop()
+            // حجم المكعب المرشد وهو يطير
+            val guideSize = 0.22 + 0.06 * sin(timeMs / 100.0)
+            val guideBox = AABB(
+                currentGuidePos.x - guideSize, currentGuidePos.y - guideSize, currentGuidePos.z - guideSize,
+                currentGuidePos.x + guideSize, currentGuidePos.y + guideSize, currentGuidePos.z + guideSize
+            )
 
-            // نجوم مضيئة على طول العمود السماوي
-            for (step in 1..4) {
-                val nodePos = center.add(0.0, (beamHeight / 4.0) * step, 0.0)
-                Gizmos.point(nodePos, beamColor, (4.0 + 2.0 * pulse).toFloat()).setAlwaysOnTop()
-            }
+            val guideAlpha = (220 * masterAlpha).toInt()
+            val guideColor = argb(guideAlpha, rgb)
+            val guideFill = argb((60 * masterAlpha).toInt(), rgb)
+
+            // رسم المكعب المرشد المنطلق بالهواء باتجاه الصندوق
+            Gizmos.cuboid(guideBox, GizmoStyle.strokeAndFill(guideColor, 2.5f, guideFill)).setAlwaysOnTop()
+            Gizmos.point(currentGuidePos, guideColor, 6.0f).setAlwaysOnTop()
+
+            // 3. ذيل ناعم وخافت يوضح المسار خلف المكعب المرشد
+            val tailProgress = (progress - 0.12).coerceAtLeast(0.0)
+            val tailPos = lerp(startPos, center, tailProgress)
+            val trailAlpha = (75 * masterAlpha).toInt()
+            Gizmos.line(tailPos, currentGuidePos, argb(trailAlpha, rgb), 2.2f).setAlwaysOnTop()
         }
     }
 
@@ -124,7 +156,7 @@ object Highlights {
             return
         }
 
-        // تشغيل الـ Fade-out فور فتح الصندوق
+        // تشغيل الـ Fade-out التلقائي فور فتح الصندوق
         if (player.containerMenu != player.inventoryMenu) {
             val pPos = player.blockPosition()
             for (h in list) {
